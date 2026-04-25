@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -6,8 +7,18 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
 
+    # ── Embeddings ────────────────────────────────────────────────────────────
+    # Opciones: ollama | openai
+    EMBEDDING_PROVIDER: str = "ollama"
+    EMBEDDING_MODEL: Optional[str] = None  # vacío = default del proveedor
+
+    # ── Credenciales ─────────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
 
+    # ── Ollama ────────────────────────────────────────────────────────────────
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # ── ChromaDB ─────────────────────────────────────────────────────────────
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8004
     CHROMA_COLLECTION: str = "thesis_docs"

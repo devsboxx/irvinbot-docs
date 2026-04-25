@@ -1,13 +1,17 @@
+import logging
+from typing import List
+
 import chromadb
 from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
+
 from app.core.config import settings
-from typing import List
+from app.llm.providers import get_embeddings
+
+logger = logging.getLogger(__name__)
 
 
 def _get_vectorstore() -> Chroma:
-    embeddings = OpenAIEmbeddings(api_key=settings.OPENAI_API_KEY)
     chroma_client = chromadb.HttpClient(
         host=settings.CHROMA_HOST,
         port=settings.CHROMA_PORT,
@@ -15,7 +19,7 @@ def _get_vectorstore() -> Chroma:
     return Chroma(
         client=chroma_client,
         collection_name=settings.CHROMA_COLLECTION,
-        embedding_function=embeddings,
+        embedding_function=get_embeddings(),
     )
 
 
