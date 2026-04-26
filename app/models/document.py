@@ -12,6 +12,8 @@ class Document(Base):
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     original_name = Column(String(255), nullable=False)
     file_path = Column(String(512), nullable=False)
+    r2_key = Column(String(512), nullable=True)
+    r2_url = Column(String(1024), nullable=True)
     status = Column(String(20), nullable=False, default="processing")  # processing | ready | error
     chunk_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)

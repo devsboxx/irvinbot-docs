@@ -11,6 +11,7 @@ class DocumentOut(BaseModel):
     status: str
     chunk_count: int
     error_message: Optional[str] = None
+    r2_url: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
