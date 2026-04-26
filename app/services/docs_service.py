@@ -7,7 +7,6 @@ from fastapi import HTTPException, UploadFile, status
 from app.core.config import settings
 from app.models.document import Document
 from app.schemas.docs import DocumentOut, DocumentList, UploadResponse
-from app.processing import pdf_parser, vector_store
 
 
 def upload_document(db: Session, user_id: str, file: UploadFile) -> UploadResponse:
@@ -25,33 +24,15 @@ def upload_document(db: Session, user_id: str, file: UploadFile) -> UploadRespon
         user_id=uuid.UUID(user_id),
         original_name=file.filename,
         file_path=file_path,
-        status="processing",
+        status="ready",
     )
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
-    try:
-        chunks = pdf_parser.parse_and_chunk(
-            file_path,
-            extra_metadata={
-                "document_id": str(doc_id),
-                "user_id": user_id,
-                "source": file.filename,
-            },
-        )
-        chunk_count = vector_store.add_documents(chunks)
-        doc.status = "ready"
-        doc.chunk_count = chunk_count
-    except Exception as exc:
-        doc.status = "error"
-        doc.error_message = str(exc)
-
-    db.commit()
-    db.refresh(doc)
     return UploadResponse(
         document=DocumentOut.model_validate(doc),
-        message="Documento procesado correctamente" if doc.status == "ready" else "Error al procesar",
+        message="Documento guardado correctamente",
     )
 
 
@@ -75,8 +56,6 @@ def get_document(db: Session, document_id: str, user_id: str) -> DocumentOut:
 
 def delete_document(db: Session, document_id: str, user_id: str) -> None:
     doc = _get_owned_doc(db, document_id, user_id)
-
-    vector_store.delete_by_document_id(document_id)
 
     if os.path.exists(doc.file_path):
         os.remove(doc.file_path)

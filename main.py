@@ -1,12 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import docs_router
-from app.core.database import Base, engine
+from app.api import methodology_router
+from app.core.database import Base, engine, SessionLocal
 from app.core.config import settings
+from app.services.methodology_service import seed_if_empty
 import os
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 Base.metadata.create_all(bind=engine)
+
+db = SessionLocal()
+try:
+    seed_if_empty(db)
+finally:
+    db.close()
 
 app = FastAPI(title="irvinbot-docs", version="1.0.0")
 
@@ -19,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(docs_router.router, prefix="/docs", tags=["docs"])
+app.include_router(methodology_router.router, prefix="/methodology", tags=["methodology"])
 
 
 @app.get("/health")
