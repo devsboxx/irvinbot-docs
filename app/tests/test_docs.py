@@ -1,13 +1,18 @@
+import os
+# Entorno hermético antes de importar main (que crea UPLOAD_DIR y hace create_all):
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_docs.db")
+os.environ.setdefault("UPLOAD_DIR", "./test_uploads")
+
 import io
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from unittest.mock import patch, MagicMock
 
 from main import app
 from app.core.database import Base, get_db
-from app.core.security import get_user_id_from_token
+from app.api import docs_router
 
 SQLALCHEMY_TEST_URL = "sqlite:///./test_docs.db"
 engine = create_engine(SQLALCHEMY_TEST_URL, connect_args={"check_same_thread": False})
@@ -30,7 +35,9 @@ def override_current_user():
 
 
 app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[get_user_id_from_token] = override_current_user
+# La dependencia de auth real es `current_user` (envuelve get_user_id_from_token).
+app.dependency_overrides[docs_router.current_user] = override_current_user
+Base.metadata.drop_all(bind=engine)   # arranca limpio aunque queden archivos previos
 Base.metadata.create_all(bind=engine)
 client = TestClient(app)
 
@@ -55,32 +62,24 @@ def test_upload_non_pdf_rejected():
 
 
 def test_upload_pdf_success():
-    mock_chunks = [MagicMock(page_content="chunk 1", metadata={})]
-
-    with patch("app.processing.pdf_parser.parse_and_chunk", return_value=mock_chunks):
-        with patch("app.processing.vector_store.add_documents", return_value=1):
-            res = client.post(
-                "/docs/upload",
-                files={"file": ("thesis.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
-                headers=AUTH_HEADER,
-            )
-
+    res = client.post(
+        "/docs/upload",
+        files={"file": ("thesis.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
+        headers=AUTH_HEADER,
+    )
     assert res.status_code == 201
     data = res.json()
     assert data["document"]["status"] == "ready"
-    assert data["document"]["chunk_count"] == 1
+    assert data["document"]["original_name"] == "thesis.pdf"
+    assert "id" in data["document"]
 
 
 def test_get_document():
-    mock_chunks = [MagicMock(page_content="x", metadata={})]
-    with patch("app.processing.pdf_parser.parse_and_chunk", return_value=mock_chunks):
-        with patch("app.processing.vector_store.add_documents", return_value=1):
-            upload_res = client.post(
-                "/docs/upload",
-                files={"file": ("doc.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
-                headers=AUTH_HEADER,
-            )
-
+    upload_res = client.post(
+        "/docs/upload",
+        files={"file": ("doc.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
+        headers=AUTH_HEADER,
+    )
     doc_id = upload_res.json()["document"]["id"]
     res = client.get(f"/docs/{doc_id}", headers=AUTH_HEADER)
     assert res.status_code == 200
@@ -88,24 +87,16 @@ def test_get_document():
 
 
 def test_delete_document():
-    mock_chunks = [MagicMock(page_content="x", metadata={})]
-    with patch("app.processing.pdf_parser.parse_and_chunk", return_value=mock_chunks):
-        with patch("app.processing.vector_store.add_documents", return_value=1):
-            upload_res = client.post(
-                "/docs/upload",
-                files={"file": ("del.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
-                headers=AUTH_HEADER,
-            )
-
+    upload_res = client.post(
+        "/docs/upload",
+        files={"file": ("del.pdf", io.BytesIO(_fake_pdf_bytes()), "application/pdf")},
+        headers=AUTH_HEADER,
+    )
     doc_id = upload_res.json()["document"]["id"]
-
-    with patch("app.processing.vector_store.delete_by_document_id"):
-        with patch("os.path.exists", return_value=False):
-            del_res = client.delete(f"/docs/{doc_id}", headers=AUTH_HEADER)
-
+    del_res = client.delete(f"/docs/{doc_id}", headers=AUTH_HEADER)
     assert del_res.status_code == 204
 
 
 def test_get_nonexistent_document():
-    res = client.get("/docs/00000000-0000-0000-0000-000000000099", headers=AUTH_HEADER)
+    res = client.get(f"/docs/{uuid.uuid4()}", headers=AUTH_HEADER)
     assert res.status_code == 404
